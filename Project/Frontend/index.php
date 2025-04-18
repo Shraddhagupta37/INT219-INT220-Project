@@ -5,7 +5,8 @@
             window.location.replace(window.location.href);
         };
     }
-</script><?php
+</script>
+<?php
 session_start();
 require_once dirname(__FILE__) . '/../Backend/PHP/config.php';
 ?>
@@ -30,24 +31,24 @@ require_once dirname(__FILE__) . '/../Backend/PHP/config.php';
                     </a>
                     <!-- Navigation Links with animated underline -->
                     <?php
-    if (isset($_SESSION['user_id'])) {
-        // Assuming you store user role as 'role' in session: 'admin' or 'candidate'
-        if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
-            echo "<a href='Pages/admin-dashboard.php' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Dashboard</a>";
-        } else {
-            echo "<a href='Pages/candidate-dashboard.php' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Dashboard</a>";
-        }
-    } else {
-        echo "<a href='Pages/login.php' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Dashboard</a>";
-    }
-?>
+                        if (isset($_SESSION['user_id'])) {
+                            // Assuming you store user role as 'role' in session: 'admin' or 'candidate'
+                            if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
+                                echo "<a href='Pages/admin-dashboard.php' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Dashboard</a>";
+                            } else {
+                                echo "<a href='Pages/candidate-dashboard.php' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Dashboard</a>";
+                            }
+                        } else {
+                            echo "<a href='Pages/login.php' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Dashboard</a>";
+                        }
+                    ?>
                     <?php
-if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
-    echo "<a href=\"#\" onclick=\"alert('Admins cannot take the mock tests');return false;\" class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Mock Test</a>";
-} else {
-    echo "<a href='Pages/take-test.php?test_id=1' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Mock Test</a>";
-}
-?>
+                        if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
+                            echo "<a href=\"#\" onclick=\"alert('Admins cannot take the mock tests');return false;\" class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Mock Test</a>";
+                        } else {
+                            echo "<a href='Pages/take-test.php?test_id=1' class='relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left'>Mock Test</a>";
+                        }
+                    ?>
                     <a href="Pages/about.php" class="relative text-gray-700 hover:text-amber-600 transition-colors duration-200 after:content-[\'\'] after:block after:h-0.5 after:bg-amber-600 after:scale-x-0 hover:after:scale-x-100 after:transition-transform after:duration-300 after:origin-left">About</a>
                 </div>
 
@@ -98,11 +99,11 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
                 <?php endif; ?>
             </div>
 
-                <!-- Animated SVG Illustration (right side, visible on md+) -->
-                <div class="hidden md:block flex-1 flex items-center justify-center">
-                    <!-- Floating animation using Tailwind animate-bounce (or custom animation if you want smoother effect) -->
-                    <img src="/Backend/Animation-vector/undraw_online-test_20lm.svg" alt="Online Test Illustration" class="w-full max-w-md mx-auto animate-bounce-slow drop-shadow-xl" style="animation-duration: 3s;">
-                </div>
+            <!-- Animated SVG Illustration (right side, visible on md+) -->
+            <div class="hidden md:block flex-1 flex items-center justify-center">
+                <!-- Floating animation using Tailwind animate-bounce (or custom animation if you want smoother effect) -->
+                <img src="/Backend/Animation-vector/undraw_online-test_20lm.svg" alt="Online Test Illustration" class="w-full max-w-md mx-auto animate-bounce-slow drop-shadow-xl" style="animation-duration: 3s;">
+            </div>
         </div>
     </section>
 
@@ -112,14 +113,14 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
             <h2 class="text-4xl font-bold text-center mb-12">Platform Features</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-10">
                 <div class="bg-gray-50 p-8 rounded-lg shadow transition-colors transition-transform duration-300 flex flex-col items-center hover:scale-105 hover:bg-gradient-to-br hover:from-amber-500 hover:to-amber-700 hover:text-white active:scale-100 active:bg-gradient-to-br active:from-amber-600 active:to-amber-900 group">
-    <div class="mb-4 group-hover:text-white group-active:text-white">
-        <svg class="w-12 h-12 text-amber-600 transition-colors duration-300 group-hover:text-white group-hover:stroke-white group-hover:fill-white group-active:text-white group-active:stroke-white group-active:fill-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="9" class="group-hover:stroke-white group-active:stroke-white" stroke="currentColor" stroke-width="2.5" fill="none" />
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4" class="group-hover:stroke-white group-active:stroke-white" stroke-width="2.5"/>
-        </svg>
-    </div>
-    <h3 class="text-xl font-semibold mb-2 text-center group-hover:text-white group-active:text-white transition-colors duration-300">Fair Assessment</h3>
-    <p class="text-gray-600 text-center group-hover:text-white group-active:text-white transition-colors duration-300">Automated, unbiased grading ensures every candidate gets a fair shot.</p>
+                    <div class="mb-4 group-hover:text-white group-active:text-white">
+                    <svg class="w-12 h-12 text-amber-600 transition-colors duration-300 group-hover:text-white group-hover:stroke-white group-hover:fill-white group-active:text-white group-active:stroke-white group-active:fill-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="9" class="group-hover:stroke-white group-active:stroke-white" stroke="currentColor" stroke-width="2.5" fill="none" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4" class="group-hover:stroke-white group-active:stroke-white" stroke-width="2.5"/>
+                    </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2 text-center group-hover:text-white group-active:text-white transition-colors duration-300">Fair Assessment</h3>
+                    <p class="text-gray-600 text-center group-hover:text-white group-active:text-white transition-colors duration-300">Automated, unbiased grading ensures every candidate gets a fair shot.</p>
                 </div>
                 <div class="bg-gray-50 p-8 rounded-lg shadow transition-colors transition-transform duration-300 flex flex-col items-center hover:scale-105 hover:bg-gradient-to-br hover:from-amber-500 hover:to-amber-700 hover:text-white active:scale-100 active:bg-gradient-to-br active:from-amber-600 active:to-amber-900 group">
                     <div class="mb-4 group-hover:text-white group-active:text-white">

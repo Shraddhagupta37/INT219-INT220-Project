@@ -70,6 +70,29 @@ try {
     $tests = [];
 }
 
+// Handle Add to Test (at the top, after fetching $tests)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_test'], $_POST['add_to_test_question_id'], $_POST['test_id'])) {
+    $question_id = (int)$_POST['add_to_test_question_id'];
+    $test_id = (int)$_POST['test_id'];
+    try {
+        // Check if already added
+        $stmt = $pdo->prepare("SELECT id FROM test_questions WHERE test_id = ? AND question_id = ?");
+        $stmt->execute([$test_id, $question_id]);
+        if (!$stmt->fetch()) {
+            $stmt = $pdo->prepare("INSERT INTO test_questions (test_id, question_id) VALUES (?, ?)");
+            $stmt->execute([$test_id, $question_id]);
+            echo '<script>alert("Question added to test successfully!"); window.location.href = "manage-questions.php";</script>';
+            exit();
+        } else {
+            echo '<script>alert("This question is already added to the selected test."); window.location.href = "manage-questions.php";</script>';
+            exit();
+        }
+    } catch (PDOException $e) {
+        echo '<script>alert("Error adding question to test: '.addslashes($e->getMessage()).'"); window.location.href = "manage-questions.php";</script>';
+        exit();
+    }
+}
+
 // Fetch all questions created by this admin
 try {
     $stmt = $pdo->prepare("
@@ -102,7 +125,7 @@ $categories = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="/Frontend/src/tailwind.css" rel="stylesheet">
+    <link href="../src/tailwind.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <title>Manage Questions - CodeLens</title>
 <style>
@@ -112,120 +135,19 @@ $categories = [
 }
 .animate-fadein { animation: fadein 0.8s ease; }
 </style>
-</head>
-<body class="bg-gradient-to-br from-amber-100 via-amber-200 to-amber-400 min-h-screen animate-fadein">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center space-x-8">
-                    <a href="../index.php" class="text-2xl font-bold text-amber-600">CodeLens</a>
-                    <a href="admin-dashboard.php" class="text-gray-700 hover:text-amber-600">Dashboard</a>
-                    <a href="manage-questions.php" class="text-gray-700 hover:text-amber-600 font-medium">Questions</a>
-                    <a href="manage-tests.php" class="text-gray-700 hover:text-amber-600">Tests</a>
-                    <a href="admin-analytics.php" class="text-gray-700 hover:text-amber-600">Analytics</a>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <span class="text-gray-700">Welcome, <?php echo htmlspecialchars($adminName); ?></span>
-                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-sm">Admin</span>
-                    <a href="../../Backend/PHP/logout.php" class="bg-amber-600 text-white px-4 py-2 rounded-md hover:bg-amber-700">Logout</a>
-                </div>
-            </div>
-        </div>
-    </nav>
 
-    <!-- Main Content -->
-    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <!-- Create Question Form -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="p-6">
-                <h2 class="text-2xl font-bold mb-6">Create New Question</h2>
-                
-                <?php if(isset($error)): ?>
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                        <?php echo htmlspecialchars($error); ?>
-                    </div>
-                <?php endif; ?>
-                
-                <?php if(isset($_GET['success'])): ?>
-                    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                        <?php echo htmlspecialchars($_GET['success']); ?>
-                    </div>
-                <?php endif; ?>
-                
-                <form method="POST" action="" id="questionForm">
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Question Type</label>
-                        <select name="type" id="questionType" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
-                            <option value="MCQ">MCQ</option>
-                            <option value="Coding">Coding</option>
-                        </select>
-                    </div>
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Question Text</label>
-                        <textarea name="question_text" rows="3" class="mt-1 block w-full text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required></textarea>
-                    </div>
-                    <div id="mcqFields">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Option A</label>
-                                <input type="text" name="option_a" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Option B</label>
-                                <input type="text" name="option_b" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Option C</label>
-                                <input type="text" name="option_c" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Option D</label>
-                                <input type="text" name="option_d" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
-                            </div>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Correct Option</label>
-                            <select name="correct_option" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
-                                <option value="A">A</option>
-                                <option value="B">B</option>
-                                <option value="C">C</option>
-                                <option value="D">D</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div id="codingFields" style="display:none;">
-    <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Language</label>
-        <select name="language" id="codingLanguage" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
-            <option value="python">Python</option>
-            <option value="c">C</option>
-            <option value="cpp">C++</option>
-            <option value="java">Java</option>
-        </select>
-    </div>
-    <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Starter Code (optional)</label>
-        <div id="monacoEditorContainer" class="border border-gray-300" style="height: 260px; border-radius: 0.75rem; overflow: hidden;"></div>
-        <textarea name="starter_code" id="starterCodeTextarea" style="display:none;"></textarea>
-    </div>
-    <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Test Cases</label>
-        <div id="testCasesContainer"></div>
-        <button type="button" id="addTestCaseBtn" class="mt-2 bg-amber-500 text-white px-4 py-1 rounded hover:bg-amber-600">Add Test Case</button>
-    </div>
-    <style>
-        .test-case-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; position: relative; }
-        .remove-testcase-btn { position: absolute; top: 0.5rem; right: 0.5rem; color: #b91c1c; background: #fee2e2; border: none; border-radius: 0.25rem; padding: 0.25rem 0.5rem; cursor: pointer; }
-    </style>
-    <style>
+<style>
+    .test-case-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; position: relative; }
+    .remove-testcase-btn { position: absolute; top: 0.5rem; right: 0.5rem; color: #b91c1c; background: #fee2e2; border: none; border-radius: 0.25rem; padding: 0.25rem 0.5rem; cursor: pointer; }
+</style>
+<style>
     /* Ensure Monaco editor itself is rounded */
     #monacoEditorContainer .monaco-editor,
     #monacoEditorContainer .overflow-guard {
         border-radius: 0.75rem !important;
         overflow: hidden;
     }
-    </style>
+</style>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.js"></script>
     <script>
     let monacoEditor;
@@ -313,7 +235,7 @@ $categories = [
         });
     });
     </script>
-</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js" integrity="sha512-6Zk6lJ5p6Kk7xJqQX6e9gWlL7rM6l9z3u5VQf3A1K0+JQv+z5kQ1FQwF7D0zF7l6Kk6lJ5p6Kk7xJqQX6e9gWlA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -362,6 +284,109 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+</head>
+<body class="bg-gradient-to-br from-amber-100 via-amber-200 to-amber-400 min-h-screen animate-fadein">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="../index.php" class="text-2xl font-bold text-amber-600">CodeLens</a>
+                    <a href="admin-dashboard.php" class="text-gray-700 hover:text-amber-600">Dashboard</a>
+                    <a href="manage-questions.php" class="text-gray-700 hover:text-amber-600 font-medium">Questions</a>
+                    <a href="manage-tests.php" class="text-gray-700 hover:text-amber-600">Tests</a>
+                    <a href="admin-analytics.php" class="text-gray-700 hover:text-amber-600">Analytics</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-gray-700">Welcome, <?php echo htmlspecialchars($adminName); ?></span>
+                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-sm">Admin</span>
+                    <a href="../../Backend/PHP/logout.php" class="bg-amber-600 text-white px-4 py-2 rounded-md hover:bg-amber-700">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <!-- Create Question Form -->
+        <div class="bg-white rounded-lg shadow mb-8">
+            <div class="p-6">
+                <h2 class="text-2xl font-bold mb-6">Create New Question</h2>
+                
+                <?php if(isset($error)): ?>
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                        <?php echo htmlspecialchars($error); ?>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if(isset($_GET['success'])): ?>
+                    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                        <?php echo htmlspecialchars($_GET['success']); ?>
+                    </div>
+                <?php endif; ?>
+                
+                <form method="POST" action="" id="questionForm">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Question Type</label>
+                        <select name="type" id="questionType" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
+                            <option value="MCQ">MCQ</option>
+                            <option value="Coding">Coding</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Question Text</label>
+                        <textarea name="question_text" rows="3" class="mt-1 block w-full text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required></textarea>
+                    </div>
+                    <div id="mcqFields">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Option A</label>
+                                <input type="text" name="option_a" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Option B</label>
+                                <input type="text" name="option_b" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Option C</label>
+                                <input type="text" name="option_c" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Option D</label>
+                                <input type="text" name="option_d" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Correct Option</label>
+                            <select name="correct_option" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="codingFields" style="display:none;">
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Language</label>
+                            <select name="language" id="codingLanguage" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                                <option value="python">Python</option>
+                                <option value="c">C</option>
+                                <option value="cpp">C++</option>
+                                <option value="java">Java</option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Starter Code (optional)</label>
+                            <div id="monacoEditorContainer" class="border border-gray-300" style="height: 260px; border-radius: 0.75rem; overflow: hidden;"></div>
+                            <textarea name="starter_code" id="starterCodeTextarea" style="display:none;"></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Test Cases</label>
+                            <div id="testCasesContainer"></div>
+                            <button type="button" id="addTestCaseBtn" class="mt-2 bg-amber-500 text-white px-4 py-1 rounded hover:bg-amber-600">Add Test Case</button>
+                        </div>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
@@ -381,7 +406,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             </select>
                         </div>
                     </div>
-                    
                     <div>
                         <button type="submit" name="create_question" 
                                 class="bg-amber-600 text-white px-6 py-2 rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
@@ -400,31 +424,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 <?php if(empty($questions)): ?>
                     <p class="text-gray-500 text-center py-6">You haven't created any questions yet.</p>
                 <?php else: ?>
-                <form id="bulkAddToTestForm" method="POST" action="">
-    <div class="flex items-center mb-4">
-    <input type="checkbox" id="selectAllQuestions" class="mr-2">
-    <label for="selectAllQuestions" class="mr-6">Select All</label>
-    <div class="flex-1"></div>
-    <button type="button" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700" onclick="openBulkAddToTestModal()" id="openBulkAddBtn" disabled>Add Selected to Test</button>
-</div>
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
+                <form id="bulkAddToTestForm" method="POST" action="manage-questions.php">
+                    <div class="flex items-center mb-4">
+                        <input type="checkbox" id="selectAllQuestions" class="mr-2">
+                        <label for="selectAllQuestions" class="mr-6">Select All</label>
+                        <div class="flex-1"></div>
+                        <button type="button" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700" onclick="openBulkAddToTestModal()" id="openBulkAddBtn">Add Selected to Test</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
                         <thead>
                             <tr>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sr. No.</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Question</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Difficulty</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-<th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Add to Test</th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Add to Test</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-    <?php foreach($questions as $question): ?>
-    <tr>
-        <td class="px-2 py-4 text-center align-middle">
-            <input type="checkbox" name="bulk_question_ids[]" value="<?php echo $question['id']; ?>" class="questionCheckbox">
-        </td>
+                            <?php foreach($questions as $question): ?>
+                            <tr>
+                                <td class="px-2 py-4 text-center align-middle">
+                                    <input type="checkbox" name="bulk_question_ids[]" value="<?php echo $question['id']; ?>" class="questionCheckbox">
+                                </td>
                                 <td class="px-6 py-4">
                                     <div class="text-sm text-gray-900">
                                         <?php echo htmlspecialchars(substr($question['question_text'], 0, 50) . (strlen($question['question_text']) > 50 ? '...' : '')); ?>
@@ -449,22 +474,22 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?php echo date('M d, Y', strtotime($question['created_at'])); ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
-    <form method="POST" action="" onsubmit="return confirm('Are you sure you want to delete this question?');" style="display:inline;">
-        <input type="hidden" name="question_id" value="<?php echo $question['id']; ?>">
-        <button type="submit" name="delete_question" class="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700">Delete</button>
-    </form>
-</td>
-<!-- Add to Test Button -->
-<td class="px-6 py-4 whitespace-nowrap text-sm">
-    <button type="button" class="bg-amber-600 text-white px-4 py-1 rounded hover:bg-amber-700" onclick="openAddToTestModal(<?php echo $question['id']; ?>)">Add to Test</button>
-</td>
+                                    <form method="POST" action="" onsubmit="return confirm('Are you sure you want to delete this question?');" style="display:inline;">
+                                        <input type="hidden" name="question_id" value="<?php echo $question['id']; ?>">
+                                        <button type="submit" name="delete_question" class="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700">Delete</button>
+                                    </form>
+                                </td>
+                                <!-- Add to Test Button -->
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    <button type="button" class="bg-amber-600 text-white px-4 py-1 rounded hover:bg-amber-700" onclick="openAddToTestModal(<?php echo $question['id']; ?>)">Add to Test</button>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
-                    </table>
-    </div>
-</form>
-<?php endif; ?>
+                        </table>
+                    </div>
+                </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -575,7 +600,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_add_to_test'], $
     <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeAddToTestModal()"></div>
     <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
     <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-      <form id="addToTestForm" method="POST" action="">
+      <form id="addToTestForm" method="POST" action="manage-questions.php">
         <input type="hidden" name="add_to_test_question_id" id="addToTestQuestionId" value="">
         <div class="mb-4">
           <label for="test_id" class="block text-sm font-medium text-gray-700 mb-1">Select Test</label>
@@ -603,29 +628,5 @@ function closeAddToTestModal() {
     document.getElementById('addToTestModal').classList.add('hidden');
 }
 </script>
-<?php
-// Handle Add to Test (at the top, after fetching $tests)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_test'], $_POST['add_to_test_question_id'], $_POST['test_id'])) {
-    $question_id = (int)$_POST['add_to_test_question_id'];
-    $test_id = (int)$_POST['test_id'];
-    try {
-        // Check if already added
-        $stmt = $pdo->prepare("SELECT id FROM test_questions WHERE test_id = ? AND question_id = ?");
-        $stmt->execute([$test_id, $question_id]);
-        if (!$stmt->fetch()) {
-            $stmt = $pdo->prepare("INSERT INTO test_questions (test_id, question_id) VALUES (?, ?)");
-            $stmt->execute([$test_id, $question_id]);
-            echo '<script>alert("Question added to test successfully!"); window.location.href = "manage-questions.php";</script>';
-            exit();
-        } else {
-            echo '<script>alert("This question is already added to the selected test."); window.location.href = "manage-questions.php";</script>';
-            exit();
-        }
-    } catch (PDOException $e) {
-        echo '<script>alert("Error adding question to test: '.addslashes($e->getMessage()).'"); window.location.href = "manage-questions.php";</script>';
-        exit();
-    }
-}
-?>
 </body>
 </html> 
