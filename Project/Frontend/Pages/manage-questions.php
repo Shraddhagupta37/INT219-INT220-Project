@@ -23,11 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_question']) &&
         // Now, delete the question itself
         $stmt = $pdo->prepare("DELETE FROM questions WHERE id = ? AND admin_id = ?");
         $stmt->execute([$qid, $_SESSION['user_id']]);
-        $success = "Question deleted successfully.";
-        header("Location: manage-questions.php?success=" . urlencode($success));
+        $_SESSION['success'] = "Question deleted successfully.";
+        header("Location: manage-questions.php");
         exit();
     } catch (PDOException $e) {
-        $error = "Error deleting question: " . $e->getMessage();
+        $_SESSION['error'] = "Error deleting question: " . $e->getMessage();
+        header("Location: manage-questions.php");
+        exit();
     }
 }
 
@@ -43,20 +45,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_question'])) {
     $difficulty = $_POST['difficulty'];
     
     if (empty($question_text) || empty($option_a) || empty($option_b) || empty($option_c) || empty($option_d)) {
-        $error = "Please fill in all required fields";
+        $_SESSION['error'] = "Please fill in all required fields";
+        header("Location: manage-questions.php");
+        exit();
     } else {
         try {
             $stmt = $pdo->prepare("INSERT INTO questions (admin_id, question_text, option_a, option_b, option_c, option_d, correct_option, category, difficulty) 
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$_SESSION['user_id'], $question_text, $option_a, $option_b, $option_c, $option_d, $correct_option, $category, $difficulty]);
             
-            $success = "Question created successfully";
-            
-            // Redirect to avoid form resubmission
-            header("Location: manage-questions.php?success=" . urlencode($success));
+            $_SESSION['success'] = "Question created successfully";
+            header("Location: manage-questions.php");
             exit();
         } catch (PDOException $e) {
-            $error = "Error creating question: " . $e->getMessage();
+            $_SESSION['error'] = "Error creating question: " . $e->getMessage();
+            header("Location: manage-questions.php");
+            exit();
         }
     }
 }
@@ -72,20 +76,16 @@ try {
 
 // Fetch all questions created by this admin
 try {
-    $stmt = $pdo->prepare("
-        SELECT * FROM questions 
-        WHERE admin_id = ? 
-        ORDER BY created_at DESC
-    ");
+    $stmt = $pdo->prepare("SELECT * FROM questions WHERE admin_id = ? ORDER BY created_at DESC");
     $stmt->execute([$_SESSION['user_id']]);
     $questions = $stmt->fetchAll();
 } catch (PDOException $e) {
-    $error = "Error fetching questions: " . $e->getMessage();
+    $_SESSION['error'] = "Error fetching questions: " . $e->getMessage();
     $questions = [];
 }
 
 // Handle Add to Test
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_test'], $_POST['add_to_test_question_id'], $_POST['test_id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_test'])) {
     $question_id = (int)$_POST['add_to_test_question_id'];
     $test_id = (int)$_POST['test_id'];
     try {
@@ -95,22 +95,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_test'], $_POST
         if (!$stmt->fetch()) {
             $stmt = $pdo->prepare("INSERT INTO test_questions (test_id, question_id) VALUES (?, ?)");
             $stmt->execute([$test_id, $question_id]);
-            echo '<script>alert("Question added to test successfully!"); window.location.href = "manage-questions.php";</script>';
-            exit();
+            $_SESSION['success'] = "Question added to test successfully!";
         } else {
-            echo '<script>alert("This question is already added to the selected test."); window.location.href = "manage-questions.php";</script>';
-            exit();
+            $_SESSION['error'] = "This question is already added to the selected test.";
         }
+        header("Location: manage-questions.php");
+        exit();
     } catch (PDOException $e) {
-        echo '<script>alert("Error adding question to test: '.addslashes($e->getMessage()).'"); window.location.href = "manage-questions.php";</script>';
+        $_SESSION['error'] = "Error adding question to test: " . $e->getMessage();
+        header("Location: manage-questions.php");
         exit();
     }
 }
 
-// Handle Bulk Add to Test - Add this block right here
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_add_to_test'], $_POST['bulk_question_ids'], $_POST['bulk_test_id'])) {
+// Handle Bulk Add to Test
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_add_to_test'])) {
     $bulk_test_id = (int)$_POST['bulk_test_id'];
-    $bulk_question_ids = is_array($_POST['bulk_question_ids']) ? array_map('intval', $_POST['bulk_question_ids']) : [];
+    $bulk_question_ids = isset($_POST['bulk_question_ids']) ? array_map('intval', $_POST['bulk_question_ids']) : [];
     $added = 0;
     $skipped = 0;
     try {
@@ -159,220 +160,220 @@ $categories = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="../src/tailwind.css" rel="stylesheet">
-    <!-- <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script> -->
     <title>Manage Questions - CodeLens</title>
-<style>
-@keyframes fadein {
-  0% { opacity: 0; transform: translateY(20px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-.animate-fadein { animation: fadein 0.8s ease; }
-</style>
-
-<style>
-    .test-case-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; position: relative; }
-    .remove-testcase-btn { position: absolute; top: 0.5rem; right: 0.5rem; color: #b91c1c; background: #fee2e2; border: none; border-radius: 0.25rem; padding: 0.25rem 0.5rem; cursor: pointer; }
-</style>
-<style>
-    /* Ensure Monaco editor itself is rounded */
-    #monacoEditorContainer .monaco-editor,
-    #monacoEditorContainer .overflow-guard {
-        border-radius: 0.75rem !important;
-        overflow: hidden;
-    }
-</style>
-<script>
-    window.addEventListener('error', function(e) {
-        console.error('Global error:', e.message, 'in', e.filename, 'line', e.lineno);
-    });
-</script>
-
-    <!-- <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.js"></script> -->
-    <script>
-    // let monacoEditor;
-    // let monacoLoaded = false;
-
-    let testCaseCount = 1;
-    let testCases = [{input:'',output:''}];
-    function renderTestCases() {
-        const container = document.getElementById('testCasesContainer');
-        container.innerHTML = '';
-        testCases.forEach((tc, idx) => {
-            container.innerHTML += `
-            <div class='test-case-card'>
-                <button type='button' class='remove-testcase-btn' onclick='removeTestCase(${idx})' title='Remove'>&times;</button>
-                <label class='block text-xs font-medium mb-1'>Input</label>
-                <textarea name='test_case_input_${idx+1}' rows='2' class='block w-full mb-2 rounded border px-2 py-1'>${tc.input}</textarea>
-                <label class='block text-xs font-medium mb-1'>Expected Output</label>
-                <textarea name='test_case_output_${idx+1}' rows='2' class='block w-full rounded border px-2 py-1'>${tc.output}</textarea>
-            </div>`;
-        });
-    }
-    function removeTestCase(idx) {
-        testCases.splice(idx,1);
-        if(testCases.length===0) testCases.push({input:'',output:''});
-        renderTestCases();
-    }
-    window.removeTestCase = removeTestCase;
-    document.addEventListener('DOMContentLoaded', function() {
-        // Monaco loader
-        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs' }});
-        require(['vs/editor/editor.main'], function() {
-            monacoLoaded = true;
-            monacoEditor = monaco.editor.create(document.getElementById('monacoEditorContainer'), {
-                value: '',
-                language: 'python',
-                theme: 'vs-dark',
-                fontSize: 15,
-                minimap: {enabled: false}
-            });
-        });
-        // Coding/MCQ toggle
-        const typeSelect = document.getElementById('questionType');
-        const mcqFields = document.getElementById('mcqFields');
-        const codingFields = document.getElementById('codingFields');
-        function toggleFields() {
-            if(typeSelect.value === 'Coding') {
-                mcqFields.style.display = 'none';
-                codingFields.style.display = '';
-                setTimeout(()=>{ if(monacoEditor) monacoEditor.layout(); }, 200);
-            } else {
-                mcqFields.style.display = '';
-                codingFields.style.display = 'none';
-            }
+    <style>
+        @keyframes fadein {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
         }
-        typeSelect.addEventListener('change', toggleFields);
-        toggleFields();
-        // Language change
-        document.getElementById('codingLanguage').addEventListener('change', function() {
-            if(monacoLoaded && monacoEditor) {
-                let lang = this.value;
-                if(lang==='cpp' || lang==='c') lang='c_cpp';
-                if(lang==='python') lang='python';
-                if(lang==='java') lang='java';
-                monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
+        .animate-fadein { animation: fadein 0.8s ease; }
+        .test-case-card { 
+            background: #f9fafb; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 0.5rem; 
+            padding: 1rem; 
+            margin-bottom: 1rem; 
+            position: relative; 
+        }
+        .remove-testcase-btn { 
+            position: absolute; 
+            top: 0.5rem; 
+            right: 0.5rem; 
+            color: #b91c1c; 
+            background: #fee2e2; 
+            border: none; 
+            border-radius: 0.25rem; 
+            padding: 0.25rem 0.5rem; 
+            cursor: pointer; 
+        }
+        #aceEditor { 
+            height: 260px; 
+            border-radius: 0.75rem; 
+            overflow: hidden; 
+            border: 1px solid #e5e7eb;
+        }
+    </style>
+    <!-- Load ACE Editor -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js"></script>
+    <script>
+        // Global variables for editors
+        let aceEditor;
+        let testCases = [{input:'',output:''}];
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing editors...');
+            
+            // Initialize ACE Editor
+            try {
+                aceEditor = ace.edit('aceEditor');
+                aceEditor.setTheme("ace/theme/monokai");
+                aceEditor.session.setMode("ace/mode/python");
+                aceEditor.setOptions({
+                    fontSize: "15px",
+                    minLines: 8,
+                    maxLines: 20
+                });
+                console.log('ACE Editor initialized successfully');
+            } catch (e) {
+                console.error('ACE Editor initialization failed:', e);
+                const aceEditorWrapper = document.getElementById('aceEditorWrapper');
+                if (aceEditorWrapper) {
+                    aceEditorWrapper.innerHTML = '<textarea name="starter_code" style="width:100%;height:260px;"></textarea>';
+                }
             }
+            
+            // Initialize test cases
+            renderTestCases();
+            
+            // Set up event listeners
+            setupEventListeners();
         });
-        // Test cases
-        renderTestCases();
-        document.getElementById('addTestCaseBtn').addEventListener('click', function() {
+        
+        // Render test cases
+        function renderTestCases() {
+            const container = document.getElementById('testCasesContainer');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            testCases.forEach((tc, idx) => {
+                container.innerHTML += `
+                <div class='test-case-card'>
+                    <button type='button' class='remove-testcase-btn' onclick='removeTestCase(${idx})' title='Remove'>&times;</button>
+                    <label class='block text-xs font-medium mb-1'>Input</label>
+                    <textarea name='test_case_input_${idx+1}' rows='2' class='block w-full mb-2 rounded border px-2 py-1'>${tc.input}</textarea>
+                    <label class='block text-xs font-medium mb-1'>Expected Output</label>
+                    <textarea name='test_case_output_${idx+1}' rows='2' class='block w-full rounded border px-2 py-1'>${tc.output}</textarea>
+                </div>`;
+            });
+        }
+        
+        // Remove test case
+        function removeTestCase(idx) {
+            testCases.splice(idx, 1);
+            if (testCases.length === 0) testCases.push({input:'',output:''});
+            renderTestCases();
+        }
+        
+        // Add test case
+        document.getElementById('addTestCaseBtn')?.addEventListener('click', function() {
             testCases.push({input:'',output:''});
             renderTestCases();
         });
-        // Form submit: sync code and testcases
-        document.getElementById('questionForm').addEventListener('submit', function() {
-            if(typeSelect.value==='Coding' && monacoEditor) {
-                document.getElementById('starterCodeTextarea').value = monacoEditor.getValue();
-                // Sync test cases
-                testCases = [];
-                document.querySelectorAll('#testCasesContainer .test-case-card').forEach(function(card, idx){
-                    let input = card.querySelector('textarea[name^="test_case_input_"]').value;
-                    let output = card.querySelector('textarea[name^="test_case_output_"]').value;
-                    testCases.push({input,output});
-                });
-                // Save as JSON in a hidden input if needed for backend
-            }
-        });
-    });
-    </script>
-
-<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js" integrity="sha512-6Zk6lJ5p6Kk7xJqQX6e9gWlL7rM6l9z3u5VQf3A1K0+JQv+z5kQ1FQwF7D0zF7l6Kk6lJ5p6Kk7xJqQX6e9gWlA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script> -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js" 
-        integrity="sha512-6ts6Fu561/yzWvD6uwQp3XVYwiWNpWnZ0hdeQrETqtnQiGjTfOS06W76aUDnq51hl1SxXtJaqy7IsZ3oP/uZEg==" 
-        crossorigin="anonymous" 
-        referrerpolicy="no-referrer">
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initializing editor...');
-    
-    // Initialize variables
-    let aceEditor;
-    const typeSelect = document.getElementById('questionType');
-    const aceEditorWrapper = document.getElementById('aceEditorWrapper');
-    const codingLanguageSelect = document.getElementById('codingLanguage');
-    const questionForm = document.getElementById('questionForm');
-
-    // Check if required elements exist
-    if (!typeSelect || !aceEditorWrapper) {
-        console.error('Required elements not found');
-        return;
-    }
-
-    // Initialize Ace Editor if available
-    if (typeof ace !== 'undefined' && aceEditorWrapper) {
-        try {
-            aceEditor = ace.edit('aceEditor');
-            aceEditor.setTheme('ace/theme/monokai');
-            aceEditor.session.setMode('ace/mode/python');
-            aceEditor.setOptions({
-                fontSize: '15px',
-                minLines: 8,
-                maxLines: 20
-            });
-            console.log('Ace editor initialized:', !!aceEditor);
-        } catch (e) {
-            console.error('Ace editor initialization failed:', e);
-            // Fallback to textarea
-            aceEditorWrapper.innerHTML = '<textarea name="starter_code" style="width:100%;height:260px;"></textarea>';
-        }
-    } else {
-        console.warn('Ace editor not available, using fallback');
-        aceEditorWrapper.innerHTML = '<textarea name="starter_code" style="width:100%;height:260px;"></textarea>';
-    }
-
-    // Toggle function
-    function toggleFields() {
-        const mcqFields = document.getElementById('mcqFields');
-        const codingFields = document.getElementById('codingFields');
         
-        if (!mcqFields || !codingFields) {
-            console.error('Field containers not found');
-            return;
-        }
-        
-        if (typeSelect.value === 'Coding') {
-            mcqFields.style.display = 'none';
-            codingFields.style.display = '';
-            aceEditorWrapper.style.display = '';
-            if (aceEditor) {
-                setTimeout(() => aceEditor.resize(), 100);
+        // Set up all event listeners
+        function setupEventListeners() {
+            const typeSelect = document.getElementById('questionType');
+            const codingLanguageSelect = document.getElementById('codingLanguage');
+            const questionForm = document.getElementById('questionForm');
+            
+            // Toggle between MCQ and Coding fields
+            function toggleFields() {
+                const mcqFields = document.getElementById('mcqFields');
+                const codingFields = document.getElementById('codingFields');
+                
+                if (!mcqFields || !codingFields) return;
+                
+                if (typeSelect.value === 'Coding') {
+                    mcqFields.style.display = 'none';
+                    codingFields.style.display = '';
+                    if (aceEditor) {
+                        setTimeout(() => aceEditor.resize(), 100);
+                    }
+                } else {
+                    mcqFields.style.display = '';
+                    codingFields.style.display = 'none';
+                }
             }
-        } else {
-            mcqFields.style.display = '';
-            codingFields.style.display = 'none';
-            aceEditorWrapper.style.display = 'none';
-        }
-    }
-
-    // Event listeners
-    typeSelect.addEventListener('change', toggleFields);
-    
-    if (codingLanguageSelect) {
-        codingLanguageSelect.addEventListener('change', function() {
-            if (aceEditor) {
+            
+            // Change ACE editor mode based on language
+            function changeAceMode() {
+                if (!aceEditor || !codingLanguageSelect) return;
+                
+                let lang = codingLanguageSelect.value;
                 let mode = 'python';
-                if (this.value === 'cpp') mode = 'c_cpp';
-                else if (this.value === 'java') mode = 'java';
+                if (lang === 'cpp') mode = 'c_cpp';
+                else if (lang === 'java') mode = 'java';
+                else if (lang === 'javascript') mode = 'javascript';
+                
                 aceEditor.session.setMode('ace/mode/' + mode);
             }
-        });
-    }
-
-    if (questionForm) {
-        questionForm.addEventListener('submit', function() {
-            if (typeSelect.value === 'Coding' && aceEditor) {
-                document.getElementById('starterCodeTextarea').value = aceEditor.getValue();
+            
+            // Sync editor content with form before submission
+            function syncEditorContent() {
+                if (typeSelect.value === 'Coding' && aceEditor) {
+                    document.getElementById('starterCodeTextarea').value = aceEditor.getValue();
+                }
             }
-        });
-    }
-
-    // Initial setup
-    toggleFields();
-});
-</script>
-
+            
+            // Set up event listeners
+            typeSelect?.addEventListener('change', toggleFields);
+            codingLanguageSelect?.addEventListener('change', changeAceMode);
+            questionForm?.addEventListener('submit', syncEditorContent);
+            
+            // Initialize fields
+            toggleFields();
+            
+            // Bulk selection functionality
+            const selectAll = document.getElementById('selectAllQuestions');
+            const checkboxes = document.querySelectorAll('.questionCheckbox');
+            
+            selectAll?.addEventListener('change', function() {
+                checkboxes.forEach(cb => cb.checked = this.checked);
+                updateBulkBtnState();
+            });
+            
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', updateBulkBtnState);
+            });
+            
+            function updateBulkBtnState() {
+                const openBulkBtn = document.getElementById('openBulkAddBtn');
+                if (!openBulkBtn) return;
+                
+                let checked = false;
+                checkboxes.forEach(cb => { if (cb.checked) checked = true; });
+                openBulkBtn.disabled = !checked;
+            }
+        }
+        
+        // Modal functions
+        function openAddToTestModal(questionId) {
+            document.getElementById('addToTestQuestionId').value = questionId;
+            document.getElementById('addToTestModal').classList.remove('hidden');
+        }
+        
+        function closeAddToTestModal() {
+            document.getElementById('addToTestModal').classList.add('hidden');
+        }
+        
+        function openBulkAddToTestModal() {
+            const checkedBoxes = document.querySelectorAll('.questionCheckbox:checked');
+            if (checkedBoxes.length === 0) {
+                alert('Please select at least one question');
+                return;
+            }
+            
+            const modalForm = document.getElementById('bulkAddToTestModalForm');
+            // Clear previous inputs
+            const existingInputs = modalForm.querySelectorAll('input[name="bulk_question_ids[]"]');
+            existingInputs.forEach(input => input.remove());
+            
+            // Add new inputs for checked questions
+            checkedBoxes.forEach(cb => {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'bulk_question_ids[]';
+                hidden.value = cb.value;
+                modalForm.appendChild(hidden);
+            });
+            
+            document.getElementById('bulkAddToTestModal').classList.remove('hidden');
+        }
+        
+        function closeBulkAddToTestModal() {
+            document.getElementById('bulkAddToTestModal').classList.add('hidden');
+        }
+    </script>
 </head>
 <body class="bg-gradient-to-br from-amber-100 via-amber-200 to-amber-400 min-h-screen animate-fadein">
     <!-- Navigation -->
@@ -397,22 +398,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Main Content -->
     <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <!-- Status Messages -->
+        <?php if(isset($_SESSION['error'])): ?>
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?>
+            </div>
+        <?php endif; ?>
+        
+        <?php if(isset($_SESSION['success'])): ?>
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                <?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?>
+            </div>
+        <?php endif; ?>
+
         <!-- Create Question Form -->
         <div class="bg-white rounded-lg shadow mb-8">
             <div class="p-6">
                 <h2 class="text-2xl font-bold mb-6">Create New Question</h2>
-                
-                <?php if(isset($error)): ?>
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                        <?php echo htmlspecialchars($error); ?>
-                    </div>
-                <?php endif; ?>
-                
-                <?php if(isset($_GET['success'])): ?>
-                    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                        <?php echo htmlspecialchars($_GET['success']); ?>
-                    </div>
-                <?php endif; ?>
                 
                 <form method="POST" action="" id="questionForm">
                     <div class="mb-4">
@@ -430,24 +432,24 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Option A</label>
-                                <input type="text" name="option_a" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                                <input type="text" name="option_a" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Option B</label>
-                                <input type="text" name="option_b" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                                <input type="text" name="option_b" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Option C</label>
-                                <input type="text" name="option_c" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                                <input type="text" name="option_c" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Option D</label>
-                                <input type="text" name="option_d" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                                <input type="text" name="option_d" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
                             </div>
                         </div>
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Correct Option</label>
-                            <select name="correct_option" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2">
+                            <select name="correct_option" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
                                 <option value="A">A</option>
                                 <option value="B">B</option>
                                 <option value="C">C</option>
@@ -468,9 +470,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Starter Code (optional)</label>
-                            <div id="aceEditorContainer" class="border border-gray-300" style="height: 260px; border-radius: 0.75rem; overflow: hidden;"></div>
-                            <div id="aceEditor" style="height:100%;"></div>
-                            <textarea name="starter_code" id="starterCodeTextarea" style="display:none;"></textarea>
+                            <div id="aceEditorWrapper">
+                                <div id="aceEditor"></div>
+                                <textarea name="starter_code" id="starterCodeTextarea" style="display:none;"></textarea>
+                            </div>
                         </div>
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Test Cases</label>
@@ -489,8 +492,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
-                            <select name="difficulty" 
-                                    class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
+                            <select name="difficulty" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
                                 <option value="easy">Easy</option>
                                 <option value="medium">Medium</option>
                                 <option value="hard">Hard</option>
@@ -498,8 +500,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     </div>
                     <div>
-                        <button type="submit" name="create_question" 
-                                class="bg-amber-600 text-white px-6 py-2 rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
+                        <button type="submit" name="create_question" class="bg-amber-600 text-white px-6 py-2 rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
                             Create Question
                         </button>
                     </div>
@@ -515,7 +516,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <?php if(empty($questions)): ?>
                     <p class="text-gray-500 text-center py-6">You haven't created any questions yet.</p>
                 <?php else: ?>
-                <form id="bulkAddToTestForm" method="POST" action="test-questions.php">
+                <form id="bulkAddToTestForm" method="POST" action="">
                     <div class="flex items-center mb-4">
                         <input type="checkbox" id="selectAllQuestions" class="mr-2">
                         <label for="selectAllQuestions" class="mr-6">Select All</label>
@@ -526,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <table class="min-w-full divide-y divide-gray-200">
                         <thead>
                             <tr>
-                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sr. No.</th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Select</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Question</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                                 <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Difficulty</th>
@@ -536,9 +537,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-                            <?php foreach($questions as $question): ?>
+                            <?php foreach($questions as $index => $question): ?>
                             <tr>
-                                <td class="px-2 py-4 text-center align-middle">
+                                <td class="px-6 py-4 text-center align-middle">
                                     <input type="checkbox" name="bulk_question_ids[]" value="<?php echo $question['id']; ?>" class="questionCheckbox">
                                 </td>
                                 <td class="px-6 py-4">
@@ -570,7 +571,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <button type="submit" name="delete_question" class="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700">Delete</button>
                                     </form>
                                 </td>
-                                <!-- Add to Test Button -->
                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                                     <button type="button" class="bg-amber-600 text-white px-4 py-1 rounded hover:bg-amber-700" onclick="openAddToTestModal(<?php echo $question['id']; ?>)">Add to Test</button>
                                 </td>
@@ -585,123 +585,56 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </div>
 
-<!-- Bulk Add to Test Modal -->
-<div id="bulkAddToTestModal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeBulkAddToTestModal()"></div>
-    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-    <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-      <form id="bulkAddToTestModalForm" method="POST" action="manage-questions.php">
-        <input type="hidden" name="bulk_add_to_test" value="1">
-        <div class="mb-4">
-          <label for="bulk_test_id" class="block text-sm font-medium text-gray-700 mb-1">Select Test</label>
-          <select name="bulk_test_id" id="bulkAddToTestTestSelect" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
-            <option value="">-- Select Test --</option>
-            <?php foreach($tests as $test): ?>
-                <option value="<?php echo $test['id']; ?>"><?php echo htmlspecialchars($test['title']); ?></option>
-            <?php endforeach; ?>
-          </select>
+    <!-- Add to Test Modal -->
+    <div id="addToTestModal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeAddToTestModal()"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+          <form method="POST" action="">
+            <input type="hidden" name="add_to_test_question_id" id="addToTestQuestionId" value="">
+            <div class="mb-4">
+              <label for="test_id" class="block text-sm font-medium text-gray-700 mb-1">Select Test</label>
+              <select name="test_id" id="addToTestTestSelect" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
+                <option value="">-- Select Test --</option>
+                <?php foreach($tests as $test): ?>
+                    <option value="<?php echo $test['id']; ?>"><?php echo htmlspecialchars($test['title']); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="flex justify-end">
+              <button type="button" onclick="closeAddToTestModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded mr-2">Cancel</button>
+              <button type="submit" name="add_to_test" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700">Add</button>
+            </div>
+          </form>
         </div>
-        <div class="flex justify-end">
-          <button type="button" onclick="closeBulkAddToTestModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded mr-2">Cancel</button>
-          <button type="submit" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700">Add Selected</button>
-        </div>
-      </form>
+      </div>
     </div>
-  </div>
-</div>
 
-<script>
-// Bulk selection logic
-const selectAll = document.getElementById('selectAllQuestions');
-const checkboxes = document.getElementsByClassName('questionCheckbox');
-const openBulkBtn = document.getElementById('openBulkAddBtn');
-
-selectAll && selectAll.addEventListener('change', function() {
-    for (let cb of checkboxes) cb.checked = this.checked;
-    updateBulkBtnState();
-});
-
-for (let cb of checkboxes) {
-    cb.addEventListener('change', updateBulkBtnState);
-}
-
-function updateBulkBtnState() {
-    let checked = false;
-    for (let cb of checkboxes) if (cb.checked) checked = true;
-    openBulkBtn.disabled = !checked;
-}
-
-document.getElementById('bulkAddToTestModalForm')?.addEventListener('submit', function(e) {
-    // Let form submit normally to manage-questions.php
-});
-
-document.getElementById('addToTestForm')?.addEventListener('submit', function(e) {
-    // Let form submit normally to manage-questions.php
-});
-
-function openBulkAddToTestModal() {
-    const checkedBoxes = document.querySelectorAll('.questionCheckbox:checked');
-    if (checkedBoxes.length === 0) {
-        alert('Please select at least one question');
-        return;
-    }
-    
-    const modalForm = document.getElementById('bulkAddToTestModalForm');
-    // Clear previous inputs
-    const existingInputs = modalForm.querySelectorAll('input[name="bulk_question_ids[]"]');
-    existingInputs.forEach(input => input.remove());
-    
-    // Add new inputs for checked questions
-    checkedBoxes.forEach(cb => {
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.name = 'bulk_question_ids[]';
-        hidden.value = cb.value;
-        modalForm.appendChild(hidden);
-    });
-    
-    document.getElementById('bulkAddToTestModal').classList.remove('hidden');
-}
-
-function closeBulkAddToTestModal() {
-    document.getElementById('bulkAddToTestModal').classList.add('hidden');
-}
-</script>
-
-<!-- Add to Test Modal -->
-<div id="addToTestModal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeAddToTestModal()"></div>
-    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-    <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-      <form id="addToTestForm" method="POST" action="manage-questions.php">
-        <input type="hidden" name="add_to_test_question_id" id="addToTestQuestionId" value="">
-        <div class="mb-4">
-          <label for="test_id" class="block text-sm font-medium text-gray-700 mb-1">Select Test</label>
-          <select name="test_id" id="addToTestTestSelect" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
-            <option value="">-- Select Test --</option>
-            <?php foreach($tests as $test): ?>
-                <option value="<?php echo $test['id']; ?>"><?php echo htmlspecialchars($test['title']); ?></option>
-            <?php endforeach; ?>
-          </select>
+    <!-- Bulk Add to Test Modal -->
+    <div id="bulkAddToTestModal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeBulkAddToTestModal()"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+          <form id="bulkAddToTestModalForm" method="POST" action="">
+            <input type="hidden" name="bulk_add_to_test" value="1">
+            <div class="mb-4">
+              <label for="bulk_test_id" class="block text-sm font-medium text-gray-700 mb-1">Select Test</label>
+              <select name="bulk_test_id" id="bulkAddToTestTestSelect" class="mt-1 block w-full h-11 text-base rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 px-3 py-2" required>
+                <option value="">-- Select Test --</option>
+                <?php foreach($tests as $test): ?>
+                    <option value="<?php echo $test['id']; ?>"><?php echo htmlspecialchars($test['title']); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="flex justify-end">
+              <button type="button" onclick="closeBulkAddToTestModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded mr-2">Cancel</button>
+              <button type="submit" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700">Add Selected</button>
+            </div>
+          </form>
         </div>
-        <div class="flex justify-end">
-          <button type="button" onclick="closeAddToTestModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded mr-2">Cancel</button>
-          <button type="submit" name="add_to_test" class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700">Add</button>
-        </div>
-      </form>
+      </div>
     </div>
-  </div>
-</div>
-<script>
-function openAddToTestModal(questionId) {
-    document.getElementById('addToTestQuestionId').value = questionId;
-    document.getElementById('addToTestModal').classList.remove('hidden');
-}
-function closeAddToTestModal() {
-    document.getElementById('addToTestModal').classList.add('hidden');
-}
-</script>
 </body>
-</html> 
+</html>

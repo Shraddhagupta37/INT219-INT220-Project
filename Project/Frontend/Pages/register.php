@@ -56,18 +56,37 @@ if(isset($_SESSION['user_id'])) {
 
                 <!-- Phone Number -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                    <div class="mt-1 relative rounded-md shadow-sm">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span class="text-gray-500 sm:text-sm">+91</span>
-                        </div>
-                        <input name="phone" type="tel" id="phone" 
-                               class="mt-1 block w-full pl-12 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500" 
-                               pattern="[6-9][0-9]{9}" 
-                               maxlength="10" 
-                               required 
-                               oninput="validatePhone(this)">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Country &amp; Phone Number</label>
+                    <div class="mt-1 flex rounded-md shadow-sm">
+                        <select name="country_code" id="country_code" class="block w-1/3 px-2 py-2 rounded-l-md border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500" required>
+                            <option value="+61">Australia (+61)</option>
+                            <option value="+55">Brazil (+55)</option>
+                            <option value="+1">Canada (+1)</option>
+                            <option value="+86">China (+86)</option>
+                            <option value="+33">France (+33)</option>
+                            <option value="+49">Germany (+49)</option>
+                            <option value="+91">India (+91)</option>
+                            <option value="+62">Indonesia (+62)</option>
+                            <option value="+39">Italy (+39)</option>
+                            <option value="+81">Japan (+81)</option>
+                            <option value="+52">Mexico (+52)</option>
+                            <option value="+7">Russia (+7)</option>
+                            <option value="+966">Saudi Arabia (+966)</option>
+                            <option value="+27">South Africa (+27)</option>
+                            <option value="+82">South Korea (+82)</option>
+                            <option value="+34">Spain (+34)</option>
+                            <option value="+90">Turkey (+90)</option>
+                            <option value="+971">UAE (+971)</option>
+                            <option value="+44">United Kingdom (+44)</option>
+                            <option value="+1">United States (+1)</option>
+                        </select>
+                        <input name="phone" type="tel" id="phone"
+                               class="block w-2/3 px-3 py-2 rounded-r-md border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                               pattern="[0-9]{5,15}"
+                               required
+                               placeholder="Phone number (no country code)">
                     </div>
+                    <p class="mt-1 text-sm text-gray-500">Select country code and enter your phone number (no length restriction).</p>
                 </div>
 
                 <!-- Password -->
