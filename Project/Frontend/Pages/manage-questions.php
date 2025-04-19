@@ -70,7 +70,21 @@ try {
     $tests = [];
 }
 
-// Handle Add to Test (at the top, after fetching $tests)
+// Fetch all questions created by this admin
+try {
+    $stmt = $pdo->prepare("
+        SELECT * FROM questions 
+        WHERE admin_id = ? 
+        ORDER BY created_at DESC
+    ");
+    $stmt->execute([$_SESSION['user_id']]);
+    $questions = $stmt->fetchAll();
+} catch (PDOException $e) {
+    $error = "Error fetching questions: " . $e->getMessage();
+    $questions = [];
+}
+
+// Handle Add to Test
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_test'], $_POST['add_to_test_question_id'], $_POST['test_id'])) {
     $question_id = (int)$_POST['add_to_test_question_id'];
     $test_id = (int)$_POST['test_id'];
@@ -93,18 +107,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_test'], $_POST
     }
 }
 
-// Fetch all questions created by this admin
-try {
-    $stmt = $pdo->prepare("
-        SELECT * FROM questions 
-        WHERE admin_id = ? 
-        ORDER BY created_at DESC
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $questions = $stmt->fetchAll();
-} catch (PDOException $e) {
-    $error = "Error fetching questions: " . $e->getMessage();
-    $questions = [];
+// Handle Bulk Add to Test - Add this block right here
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_add_to_test'], $_POST['bulk_question_ids'], $_POST['bulk_test_id'])) {
+    $bulk_test_id = (int)$_POST['bulk_test_id'];
+    $bulk_question_ids = is_array($_POST['bulk_question_ids']) ? array_map('intval', $_POST['bulk_question_ids']) : [];
+    $added = 0;
+    $skipped = 0;
+    try {
+        $pdo->beginTransaction();
+        $insertStmt = $pdo->prepare("INSERT INTO test_questions (test_id, question_id) VALUES (?, ?)");
+        $checkStmt = $pdo->prepare("SELECT id FROM test_questions WHERE test_id = ? AND question_id = ?");
+        
+        foreach ($bulk_question_ids as $qid) {
+            $checkStmt->execute([$bulk_test_id, $qid]);
+            if (!$checkStmt->fetch()) {
+                $insertStmt->execute([$bulk_test_id, $qid]);
+                $added++;
+            } else {
+                $skipped++;
+            }
+        }
+        
+        $pdo->commit();
+        $_SESSION['success'] = "Added $added questions to test." . ($skipped ? " $skipped already existed." : "");
+        header("Location: manage-questions.php");
+        exit();
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        $_SESSION['error'] = "Error adding questions: " . $e->getMessage();
+        header("Location: manage-questions.php");
+        exit();
+    }
 }
 
 // Categories for dropdown
@@ -126,7 +159,7 @@ $categories = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="../src/tailwind.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script> -->
     <title>Manage Questions - CodeLens</title>
 <style>
 @keyframes fadein {
@@ -148,10 +181,17 @@ $categories = [
         overflow: hidden;
     }
 </style>
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.js"></script>
+<script>
+    window.addEventListener('error', function(e) {
+        console.error('Global error:', e.message, 'in', e.filename, 'line', e.lineno);
+    });
+</script>
+
+    <!-- <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.js"></script> -->
     <script>
-    let monacoEditor;
-    let monacoLoaded = false;
+    // let monacoEditor;
+    // let monacoLoaded = false;
+
     let testCaseCount = 1;
     let testCases = [{input:'',output:''}];
     function renderTestCases() {
@@ -236,24 +276,68 @@ $categories = [
     });
     </script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js" integrity="sha512-6Zk6lJ5p6Kk7xJqQX6e9gWlL7rM6l9z3u5VQf3A1K0+JQv+z5kQ1FQwF7D0zF7l6Kk6lJ5p6Kk7xJqQX6e9gWlA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js" integrity="sha512-6Zk6lJ5p6Kk7xJqQX6e9gWlL7rM6l9z3u5VQf3A1K0+JQv+z5kQ1FQwF7D0zF7l6Kk6lJ5p6Kk7xJqQX6e9gWlA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script> -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js" 
+        integrity="sha512-6ts6Fu561/yzWvD6uwQp3XVYwiWNpWnZ0hdeQrETqtnQiGjTfOS06W76aUDnq51hl1SxXtJaqy7IsZ3oP/uZEg==" 
+        crossorigin="anonymous" 
+        referrerpolicy="no-referrer">
+</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const typeSelect = document.getElementById('questionType');
-    const mcqFields = document.getElementById('mcqFields');
-    const codingFields = document.getElementById('codingFields');
-    const aceEditorWrapper = document.getElementById('aceEditorWrapper');
+    console.log('Initializing editor...');
+    
+    // Initialize variables
     let aceEditor;
+    const typeSelect = document.getElementById('questionType');
+    const aceEditorWrapper = document.getElementById('aceEditorWrapper');
+    const codingLanguageSelect = document.getElementById('codingLanguage');
+    const questionForm = document.getElementById('questionForm');
+
+    // Check if required elements exist
+    if (!typeSelect || !aceEditorWrapper) {
+        console.error('Required elements not found');
+        return;
+    }
+
+    // Initialize Ace Editor if available
+    if (typeof ace !== 'undefined' && aceEditorWrapper) {
+        try {
+            aceEditor = ace.edit('aceEditor');
+            aceEditor.setTheme('ace/theme/monokai');
+            aceEditor.session.setMode('ace/mode/python');
+            aceEditor.setOptions({
+                fontSize: '15px',
+                minLines: 8,
+                maxLines: 20
+            });
+            console.log('Ace editor initialized:', !!aceEditor);
+        } catch (e) {
+            console.error('Ace editor initialization failed:', e);
+            // Fallback to textarea
+            aceEditorWrapper.innerHTML = '<textarea name="starter_code" style="width:100%;height:260px;"></textarea>';
+        }
+    } else {
+        console.warn('Ace editor not available, using fallback');
+        aceEditorWrapper.innerHTML = '<textarea name="starter_code" style="width:100%;height:260px;"></textarea>';
+    }
+
+    // Toggle function
     function toggleFields() {
-        if(typeSelect.value === 'Coding') {
+        const mcqFields = document.getElementById('mcqFields');
+        const codingFields = document.getElementById('codingFields');
+        
+        if (!mcqFields || !codingFields) {
+            console.error('Field containers not found');
+            return;
+        }
+        
+        if (typeSelect.value === 'Coding') {
             mcqFields.style.display = 'none';
             codingFields.style.display = '';
             aceEditorWrapper.style.display = '';
-            if(!aceEditor) {
-                aceEditor = ace.edit('aceEditor');
-                aceEditor.setTheme('ace/theme/monokai');
-                aceEditor.session.setMode('ace/mode/python');
-                aceEditor.setOptions({fontSize: '15px', minLines: 8, maxLines: 20});
+            if (aceEditor) {
+                setTimeout(() => aceEditor.resize(), 100);
             }
         } else {
             mcqFields.style.display = '';
@@ -261,26 +345,31 @@ document.addEventListener('DOMContentLoaded', function() {
             aceEditorWrapper.style.display = 'none';
         }
     }
-    typeSelect.addEventListener('change', toggleFields);
-    toggleFields();
 
-    // Sync Ace Editor with textarea on submit
-    document.getElementById('questionForm').addEventListener('submit', function() {
-        if(typeSelect.value === 'Coding' && aceEditor) {
-            document.getElementById('starterCodeTextarea').value = aceEditor.getValue();
-        }
-    });
-    // Change Ace mode on language select
-    document.getElementById('codingLanguage').addEventListener('change', function() {
-        if(aceEditor) {
-            let lang = this.value;
-            let mode = 'python';
-            if(lang === 'cpp') mode = 'c_cpp';
-            else if(lang === 'java') mode = 'java';
-            else if(lang === 'javascript') mode = 'javascript';
-            aceEditor.session.setMode('ace/mode/' + mode);
-        }
-    });
+    // Event listeners
+    typeSelect.addEventListener('change', toggleFields);
+    
+    if (codingLanguageSelect) {
+        codingLanguageSelect.addEventListener('change', function() {
+            if (aceEditor) {
+                let mode = 'python';
+                if (this.value === 'cpp') mode = 'c_cpp';
+                else if (this.value === 'java') mode = 'java';
+                aceEditor.session.setMode('ace/mode/' + mode);
+            }
+        });
+    }
+
+    if (questionForm) {
+        questionForm.addEventListener('submit', function() {
+            if (typeSelect.value === 'Coding' && aceEditor) {
+                document.getElementById('starterCodeTextarea').value = aceEditor.getValue();
+            }
+        });
+    }
+
+    // Initial setup
+    toggleFields();
 });
 </script>
 
@@ -376,9 +465,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <option value="java">Java</option>
                             </select>
                         </div>
+
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">Starter Code (optional)</label>
-                            <div id="monacoEditorContainer" class="border border-gray-300" style="height: 260px; border-radius: 0.75rem; overflow: hidden;"></div>
+                            <div id="aceEditorContainer" class="border border-gray-300" style="height: 260px; border-radius: 0.75rem; overflow: hidden;"></div>
+                            <div id="aceEditor" style="height:100%;"></div>
                             <textarea name="starter_code" id="starterCodeTextarea" style="display:none;"></textarea>
                         </div>
                         <div class="mb-4">
@@ -424,7 +515,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <?php if(empty($questions)): ?>
                     <p class="text-gray-500 text-center py-6">You haven't created any questions yet.</p>
                 <?php else: ?>
-                <form id="bulkAddToTestForm" method="POST" action="manage-questions.php">
+                <form id="bulkAddToTestForm" method="POST" action="test-questions.php">
                     <div class="flex items-center mb-4">
                         <input type="checkbox" id="selectAllQuestions" class="mr-2">
                         <label for="selectAllQuestions" class="mr-6">Select All</label>
@@ -500,7 +591,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeBulkAddToTestModal()"></div>
     <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
     <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-      <form id="bulkAddToTestModalForm" method="POST" action="">
+      <form id="bulkAddToTestModalForm" method="POST" action="manage-questions.php">
         <input type="hidden" name="bulk_add_to_test" value="1">
         <div class="mb-4">
           <label for="bulk_test_id" class="block text-sm font-medium text-gray-700 mb-1">Select Test</label>
@@ -541,58 +632,42 @@ function updateBulkBtnState() {
     openBulkBtn.disabled = !checked;
 }
 
+document.getElementById('bulkAddToTestModalForm')?.addEventListener('submit', function(e) {
+    // Let form submit normally to manage-questions.php
+});
+
+document.getElementById('addToTestForm')?.addEventListener('submit', function(e) {
+    // Let form submit normally to manage-questions.php
+});
+
 function openBulkAddToTestModal() {
-    // Copy selected question IDs to modal form
-    const modalForm = document.getElementById('bulkAddToTestModalForm');
-    // Remove previous hidden inputs
-    [...modalForm.querySelectorAll('input[name="bulk_question_ids[]"]')].forEach(e => e.remove());
-    // Add checked question ids
-    for (let cb of checkboxes) {
-        if (cb.checked) {
-            let hidden = document.createElement('input');
-            hidden.type = 'hidden';
-            hidden.name = 'bulk_question_ids[]';
-            hidden.value = cb.value;
-            modalForm.appendChild(hidden);
-        }
+    const checkedBoxes = document.querySelectorAll('.questionCheckbox:checked');
+    if (checkedBoxes.length === 0) {
+        alert('Please select at least one question');
+        return;
     }
+    
+    const modalForm = document.getElementById('bulkAddToTestModalForm');
+    // Clear previous inputs
+    const existingInputs = modalForm.querySelectorAll('input[name="bulk_question_ids[]"]');
+    existingInputs.forEach(input => input.remove());
+    
+    // Add new inputs for checked questions
+    checkedBoxes.forEach(cb => {
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'bulk_question_ids[]';
+        hidden.value = cb.value;
+        modalForm.appendChild(hidden);
+    });
+    
     document.getElementById('bulkAddToTestModal').classList.remove('hidden');
 }
+
 function closeBulkAddToTestModal() {
     document.getElementById('bulkAddToTestModal').classList.add('hidden');
 }
 </script>
-
-<?php
-// Handle Bulk Add to Test
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_add_to_test'], $_POST['bulk_question_ids'], $_POST['bulk_test_id'])) {
-    $bulk_test_id = (int)$_POST['bulk_test_id'];
-    $bulk_question_ids = array_map('intval', $_POST['bulk_question_ids']);
-    $added = 0;
-    $skipped = 0;
-    try {
-        $pdo->beginTransaction();
-        $insertStmt = $pdo->prepare("INSERT INTO test_questions (test_id, question_id) VALUES (?, ?)");
-        $checkStmt = $pdo->prepare("SELECT id FROM test_questions WHERE test_id = ? AND question_id = ?");
-        foreach ($bulk_question_ids as $qid) {
-            $checkStmt->execute([$bulk_test_id, $qid]);
-            if (!$checkStmt->fetch()) {
-                $insertStmt->execute([$bulk_test_id, $qid]);
-                $added++;
-            } else {
-                $skipped++;
-            }
-        }
-        $pdo->commit();
-        echo '<script>alert("Added '.$added.' questions to test. '.($skipped ? $skipped.' already existed.' : '').'"); window.location.href = "manage-questions.php";</script>';
-        exit();
-    } catch (PDOException $e) {
-        $pdo->rollBack();
-        echo '<script>alert("Error adding questions: '.addslashes($e->getMessage()).'"); window.location.href = "manage-questions.php";</script>';
-        exit();
-    }
-}
-?>
 
 <!-- Add to Test Modal -->
 <div id="addToTestModal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
